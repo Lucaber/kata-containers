@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	v1 "github.com/containerd/cgroups/stats/v1"
 	v2 "github.com/containerd/cgroups/v2/stats"
@@ -618,9 +619,18 @@ func newSandbox(ctx context.Context, sandboxConfig SandboxConfig, factory Factor
 		return nil, err
 	}
 
+	sandboxConfig.HypervisorConfig.Ballooning = true
+
 	// store doesn't require hypervisor to be stored immediately
 	if err = s.hypervisor.CreateVM(ctx, s.id, s.network, &sandboxConfig.HypervisorConfig); err != nil {
 		return nil, err
+	}
+
+	if sandboxConfig.HypervisorConfig.Ballooning && false {
+		if sandboxConfig.AgentConfig.KernelModules == nil {
+			sandboxConfig.AgentConfig.KernelModules = make([]string, 0)
+		}
+		sandboxConfig.AgentConfig.KernelModules = append(sandboxConfig.AgentConfig.KernelModules, "virtio-balloon")
 	}
 
 	if s.disableVMShutdown, err = s.agent.init(ctx, s, sandboxConfig.AgentConfig); err != nil {
@@ -1396,6 +1406,25 @@ func (s *Sandbox) startVM(ctx context.Context, prestartHookFunc func(context.Con
 			s.cw.stop()
 			return err
 		}
+	}
+
+	// Balloon stuff here
+	if s.config.HypervisorConfig.Ballooning {
+		go func() {
+			q := s.hypervisor.(*qemu)
+			err := q.BalloonInit()
+			if err != nil {
+				s.Logger().Errorf("BALLOON INIT ERROR %v", err)
+			}
+			for {
+
+				err := q.Balloon()
+				if err != nil {
+					s.Logger().Errorf("BALLOON ERROR %v", err)
+				}
+				time.Sleep(time.Second * 5)
+			}
+		}()
 	}
 
 	// Once the hypervisor is done starting the sandbox,

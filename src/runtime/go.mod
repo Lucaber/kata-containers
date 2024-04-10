@@ -1,6 +1,8 @@
 module github.com/kata-containers/kata-containers/src/runtime
 
-go 1.19
+go 1.21
+
+toolchain go1.22.1
 
 require (
 	code.cloudfoundry.org/bytefmt v0.0.0-20211005130812-5bb3c17173e5
@@ -18,6 +20,7 @@ require (
 	github.com/containers/podman/v4 v4.2.0
 	github.com/coreos/go-systemd/v22 v22.3.2
 	github.com/docker/go-units v0.4.0
+	github.com/elastic/go-sysinfo v1.14.0
 	github.com/fsnotify/fsnotify v1.5.4
 	github.com/go-ini/ini v1.28.2
 	github.com/go-openapi/errors v0.20.2
@@ -38,7 +41,7 @@ require (
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/client_model v0.2.0
 	github.com/prometheus/common v0.32.1
-	github.com/prometheus/procfs v0.7.3
+	github.com/prometheus/procfs v0.8.0
 	github.com/safchain/ethtool v0.0.0-20210803160452-9aa261dae9b1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.0
@@ -51,7 +54,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.3.0
 	go.opentelemetry.io/otel/trace v1.3.0
 	golang.org/x/oauth2 v0.0.0-20220622183110-fd043fe589d2
-	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f
+	golang.org/x/sys v0.13.0
 	google.golang.org/grpc v1.47.0
 	k8s.io/apimachinery v0.22.5
 	k8s.io/cri-api v0.23.1
@@ -72,6 +75,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
+	github.com/elastic/go-windows v1.0.0 // indirect
 	github.com/frankban/quicktest v1.13.1 // indirect
 	github.com/go-logr/logr v1.2.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -107,6 +111,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	howett.net/plist v0.0.0-20181124034731-591f970eefbb // indirect
 )
 
 replace (

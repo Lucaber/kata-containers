@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/elastic/go-sysinfo"
 	"io"
 	"math"
 	"net"
@@ -116,6 +117,8 @@ type qemu struct {
 	stopped int32
 
 	mu sync.Mutex
+
+	currentMemLimit uint64
 }
 
 const (
@@ -701,6 +704,13 @@ func (q *qemu) CreateVM(ctx context.Context, id string, network Network, hypervi
 	qemuConfig.Devices, qemuConfig.Bios, err = q.arch.appendProtectionDevice(qemuConfig.Devices, firmwarePath, firmwareVolumePath)
 	if err != nil {
 		return err
+	}
+
+	if hypervisorConfig.Ballooning {
+		qemuConfig.Devices = append(qemuConfig.Devices, govmmQemu.BalloonDevice{
+			ID:           "foo",
+			DeflateOnOOM: true,
+		})
 	}
 
 	if ioThread != nil {
@@ -2874,4 +2884,93 @@ func (q *qemu) GenerateSocket(id string) (interface{}, error) {
 
 func (q *qemu) IsRateLimiterBuiltin() bool {
 	return false
+}
+
+func (q *qemu) BalloonInit() error {
+	if atomic.LoadInt32(&q.stopped) != 0 {
+		return fmt.Errorf("qemu is not running")
+	}
+
+	if err := q.qmpSetup(); err != nil {
+		return err
+	}
+
+	err := q.qmpMonitorCh.qmp.ExecQomSet(q.qmpMonitorCh.ctx, "machine/peripheral/foo", "guest-stats-polling-interval", 2)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (q *qemu) Balloon() error {
+	if atomic.LoadInt32(&q.stopped) != 0 {
+		return fmt.Errorf("qemu is not running")
+	}
+
+	if err := q.qmpSetup(); err != nil {
+		return err
+	}
+
+	data, err := q.qmpMonitorCh.qmp.ExecQomGet(q.qmpMonitorCh.ctx, "machine/peripheral/foo", "guest-stats")
+	if err != nil {
+		return err
+	}
+	q.Logger().Infof("BALLOON guests-stats %+v", data)
+
+	balloonStatus, err := q.qmpMonitorCh.qmp.ExecuteQueryBalloon(q.qmpMonitorCh.ctx)
+	if err != nil {
+		return err
+	}
+
+	if q.currentMemLimit == 0 {
+		q.currentMemLimit = balloonStatus.Stats.Total
+	}
+	if q.currentMemLimit > balloonStatus.Stats.Total {
+		q.currentMemLimit = balloonStatus.Stats.Total
+	}
+
+	host, err := sysinfo.Host()
+	if err != nil {
+		return err
+	}
+	hostMem, err := host.Memory()
+	if err != nil {
+		return err
+	}
+	q.Logger().Infof("BALLOON HOSTMEM %+v", hostMem)
+
+	reserved := balloonStatus.Stats.Total - q.currentMemLimit
+	realFree := balloonStatus.Stats.Free + reserved
+
+	goal := uint64(float64(hostMem.Total) * 0.8)
+	var set uint64
+	if float64(hostMem.Total-hostMem.Available)/float64(hostMem.Total) > 0.8 {
+		// try to claim mem from guest
+
+		set = uint64(float64(balloonStatus.Stats.Total-realFree) * 1.2)
+		if set > balloonStatus.Stats.Total {
+			set = balloonStatus.Stats.Total
+		}
+
+	} else {
+		// give mem to guest
+
+		set = goal
+		if set >= balloonStatus.Stats.Total {
+			set = balloonStatus.Stats.Total
+		}
+
+	}
+
+	q.Logger().Infof("BALLOON DEBUG  mem:%v reserved:%v realFree:%v set:%v", q.currentMemLimit, reserved, realFree, set)
+
+	err = q.qmpMonitorCh.qmp.ExecuteBalloon(q.qmpMonitorCh.ctx, set)
+	if err != nil {
+		q.Logger().Infof("BALLOON SET ERRRR%+v", err)
+		return errors.Wrap(err, "set err")
+	}
+	q.currentMemLimit = set
+
+	q.Logger().Infof("BALLOON %+v", balloonStatus)
+
+	return nil
 }

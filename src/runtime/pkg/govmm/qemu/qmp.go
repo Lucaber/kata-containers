@@ -76,6 +76,8 @@ type QMPConfig struct {
 
 	// specify the capacity of buffer used by receive QMP response.
 	MaxCapacity int
+
+	Ballooning bool
 }
 
 type qmpEventFilter struct {
@@ -255,6 +257,19 @@ type StatusInfo struct {
 	Running    bool   `json:"running"`
 	SingleStep bool   `json:"singlestep"`
 	Status     string `json:"status"`
+}
+
+type BalloonInfo struct {
+	MaxMem   int64 `json:"max_mem"`
+	Actual   int64 `json:"actual"`
+	TotalMem int64 `json:"total_mem"`
+	FreeMem  int64 `json:"free_mem"`
+	FreeMem2 int64 `json:"freemem"`
+	FreeMem3 int64 `json:"freeMem"`
+	Stats    struct {
+		Free  uint64 `json:"stat-free-memory"`
+		Total uint64 `json:"stat-total-memory"`
+	} `json:"stats"`
 }
 
 func (q *QMP) readLoop(fromVMCh chan<- []byte) {
@@ -1616,6 +1631,30 @@ func (q *QMP) ExecQueryQmpSchema(ctx context.Context) ([]SchemaInfo, error) {
 	}
 
 	return schemaInfo, nil
+}
+
+// ExecuteQueryStatus queries balloon info
+func (q *QMP) ExecuteQueryBalloon(ctx context.Context) (BalloonInfo, error) {
+	//response, err := q.executeCommandWithResponse(ctx, "guest-stats", nil, nil, nil)
+	response, err := q.ExecQomGet(ctx, "machine/peripheral/foo", "guest-stats")
+	if err != nil {
+		return BalloonInfo{}, err
+	}
+
+	q.cfg.Logger.Infof("BALLOON RAW: %v", response)
+
+	data, err := json.Marshal(response)
+	if err != nil {
+		return BalloonInfo{}, fmt.Errorf("unable to extract balloon status information: %v", err)
+	}
+	q.cfg.Logger.Infof("BALLOON RAW2: %v", data)
+
+	var status BalloonInfo
+	if err = json.Unmarshal(data, &status); err != nil {
+		return BalloonInfo{}, fmt.Errorf("unable to convert balloon status information: %v", err)
+	}
+
+	return status, nil
 }
 
 // ExecuteQueryStatus queries guest status

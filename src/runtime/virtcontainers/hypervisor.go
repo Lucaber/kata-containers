@@ -645,6 +645,8 @@ type HypervisorConfig struct {
 
 	// ExtraMonitorSocket allows to add an extra HMP or QMP socket when the VMM is Qemu
 	ExtraMonitorSocket govmmQemu.MonitorProtocol
+
+	Ballooning bool
 }
 
 // vcpu mapping from vcpu number to thread number
